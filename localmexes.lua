@@ -50,7 +50,7 @@ local units = {} -- player's units
 local buildings = {} -- player's buildings
 local constructors = {} -- {constructor id => true/nil} player's constructors
 local metalSpots    = {}
-local mexDefIds   = {}  -- {ud => ud}
+local mexDefIDs   = {}  -- {ud => ud}
 
 local function print_array(A, title)
   local s = "";
@@ -257,29 +257,32 @@ function widget:DrawWorldPreUnit()
   glDepthTest(false)
 end
 
-function widget:Update(deltaTime)
-end
-
 local function buildMexes()
+  echo("building mexes")
   if #free_mexes > 0 then
-    local mexpos = free_mexes[1]
-    local buildable = Spring.TestBuildOrder(UnitDefNames['armmex'].id, mexpos[1], 0, mexpos[2], 1)
+    local consID = getFreeBuilder()
+    if consID == 0 then
+      echo("    no free constructors found!")
+      return
+    end
 
-    if buildable ~= 0 then
+    local consDefID = spGetUnitDefID(consID)
+    local consDef = UnitDefs[consDefID]
 
-      local id = getFreeBuilder()
-      if id ~= 0 then
+    local orderedUnits = 0;
+    for i, option in ipairs(consDef.buildOptions) do
 
-        local udid = spGetUnitDefID(id)
-        local ud = UnitDefs[udid]
+      if mexDefIDs[option] then
+        local mexpos = free_mexes[1]
+        local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
-        echo("    giving order to unit " .. id .. "[" .. ud.name .. "] to build armmex with UD = "..UnitDefNames['armmex'].id)
-        Spring.GiveOrderToUnit(id, -UnitDefNames['armmex'].id, {mexpos[1],0,mexpos[2]}, {"shift"})
-      else
-        echo("    no free constructors found!")
+        if buildable ~= 0 then
+          echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name)
+          Spring.GiveOrderToUnit(consID, -option, {mexpos[1],0,mexpos[2]}, {"shift"})
+          break;
+
+        end
       end
-    else
-      echo ("Mex is blocked")
     end
   end
 end
@@ -354,10 +357,15 @@ end
 
 
 function widget:Initialize()
-  mexDefIds[UnitDefNames['armmex'].id] = UnitDefNames['armmex'].id
-  mexDefIds[UnitDefNames['cormex'].id] = UnitDefNames['cormex'].id
-  mexDefIds[UnitDefNames['armuwmex'].id] = UnitDefNames['armuwmex'].id
-  mexDefIds[UnitDefNames['coruwmex'].id] = UnitDefNames['coruwmex'].id
+  if not WG.metalSpots then
+    Spring.Echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
+    widgetHandler:RemoveWidget(self)
+  end
+
+  mexDefIDs[UnitDefNames['armmex'].id] = UnitDefNames['armmex'].id
+  mexDefIDs[UnitDefNames['cormex'].id] = UnitDefNames['cormex'].id
+  mexDefIDs[UnitDefNames['armuwmex'].id] = UnitDefNames['armuwmex'].id
+  mexDefIDs[UnitDefNames['coruwmex'].id] = UnitDefNames['coruwmex'].id
 
 
   units = spGetTeamUnits(spGetMyTeamID())
