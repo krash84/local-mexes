@@ -3,7 +3,7 @@
 --
 --  file:    localmexes.lua
 --  brief:
---  author:  Leonid Krashenko
+--  author:  Leonid Krashenko <leonid.krashenko@gmail.com>
 --
 --  Copyright (C) 2014.
 --  Licensed under the terms of the GNU GPL, v3.
