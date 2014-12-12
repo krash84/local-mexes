@@ -44,7 +44,8 @@ local spGetGroundHeight = Spring.GetGroundHeight
 local echo      = Spring.Echo
 
 local local_mexes = {} -- array of local mexes
-local free_mexes = {}
+local free_mexes = {} -- {{x1,z1}, {x2,z2} ... {xn,zn}}
+local proxessing_mexes = {}  -- {id1, id2, ..., id_n}
 local perimeter = {}
 local units = {} -- player's units
 local buildings = {} -- player's buildings
@@ -78,8 +79,11 @@ local function grahamscan (A)
     return (B[1]-A[1])*(C[2]-B[2])-(B[2]-A[2])*(C[1]-B[1])
   end;
 
-
   local n = #A;
+  if (n < 3) then
+    return {}
+  end
+
   --print(n)
   local P = {};
 
@@ -190,6 +194,7 @@ local function getExtractors()
 end
 
 local function getFreeMexes(localMexes)
+
   local extractors = getExtractors()
 
   local closedMexes = {} --
@@ -207,8 +212,18 @@ local function getFreeMexes(localMexes)
   end
 
   local freeMexes = {}
+
   for i, pos in ipairs(localMexes) do
-    if closedMexes[i] == nil then
+    local isProcessing = false
+    for j, pmpos in ipairs(proxessing_mexes) do
+      if pos[1] == pmpos[1] and pos[2] == pmpos[2] then
+        isProcessing = true
+        echo ("skipping processing mex")
+        break
+      end
+    end
+
+    if closedMexes[i] == nil and not isProcessing then
       table.insert(freeMexes, pos)
     end
   end
@@ -218,19 +233,19 @@ local function getFreeMexes(localMexes)
 end
 
 local function calcPerimeter()
-  local tmpcoords = {}
+  local buildingsCoords = {}
   for uid, v in pairs(buildings) do
     local udid = spGetUnitDefID(uid)
     -- local ud = UnitDefs[udid]
     local x, y, z = Spring.GetUnitPosition(uid)
 
-    table.insert(tmpcoords, {x, z})
+    table.insert(buildingsCoords, {x, z})
   end
 
-  local pnumbers = grahamscan(tmpcoords)
+  local perimeterVertices = grahamscan(buildingsCoords)
   local coords = {}
-  for k, i in ipairs(pnumbers) do
-    table.insert(coords, tmpcoords[i])
+  for k, i in ipairs(perimeterVertices) do
+    table.insert(coords, buildingsCoords[i])
   end
 
   return coords
@@ -257,27 +272,39 @@ function widget:DrawWorldPreUnit()
   glDepthTest(false)
 end
 
+-- comment: 2 or more constructors begin to build 1 mex because it is
+-- considered as "free" until the creation of the extractor is finished.
 local function buildMexes()
-  echo("building mexes")
-  if #free_mexes > 0 then
-    local consID = getFreeBuilder()
-    if consID == 0 then
-      echo("    no free constructors found!")
-      return
+  local freeBuilders = {}
+  for consID, v in pairs(constructors) do
+    local ordersQueue = Spring.GetUnitCommands(consID, 1)
+    if #ordersQueue == 0 then
+      table.insert(freeBuilders, consID)
     end
+  end
 
+  if #freeBuilders == 0 then
+    --echo("    no free constructors found!")
+    return
+  end
+
+  --if #free_mexes > 0 then
+  for j, mexpos in ipairs(free_mexes) do
+    if j > #freeBuilders then break end
+    --echo ("processing mex .. "..j.." "..mexpos[1]..", "..mexpos[2])
+
+    local consID = freeBuilders[j]
     local consDefID = spGetUnitDefID(consID)
     local consDef = UnitDefs[consDefID]
 
-    local orderedUnits = 0;
     for i, option in ipairs(consDef.buildOptions) do
 
       if mexDefIDs[option] then
-        local mexpos = free_mexes[1]
+        --local mexpos = free_mexes[1]
         local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
         if buildable ~= 0 then
-          echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name)
+          --echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
           Spring.GiveOrderToUnit(consID, -option, {mexpos[1],0,mexpos[2]}, {"shift"})
           break;
 
@@ -315,9 +342,25 @@ local function dispatchUnit(unitID, unitDefID)
   units[unitID] = true
 end
 
+function widget:UnitCreated(unitID, unitDefID, unitTeam)
+  if (unitTeam ~= spGetMyTeamID()) then
+    return
+  end
+
+  -- if we are building the mex
+  if mexDefIDs[unitDefID] then
+    local x, y, z = Spring.GetUnitPosition(unitID)
+    proxessing_mexes[unitID] = {x, z}
+  end
+end
+
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
   if (unitTeam ~= spGetMyTeamID()) then
     return
+  end
+
+  if proxessing_mexes[unitID] then
+    proxessing_mexes[unitID] = nil
   end
 
   dispatchUnit(unitID, unitDefID)
@@ -332,6 +375,10 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
+  if proxessing_mexes[unitID] then
+    proxessing_mexes[unitID] = nil
+  end
+
   units[unitID] = nil
   buildings[unitID] = nil
   constructors[unitID] = nil
