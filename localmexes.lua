@@ -71,7 +71,6 @@ local function print_array(A, title)
 end;
 
 -- return the convex hull for the set of points
--- @param A Array of
 local function grahamscan (A)
 
   function rotate (A, B, C)
@@ -257,23 +256,20 @@ function widget:DrawWorldPreUnit()
   glDepthTest(false)
 end
 
+-- build mexes process
 local function buildMexes()
-  echo("building mexes")
-  if #free_mexes > 0 then
+  for _, mexpos in ipairs(free_mexes) do
     local consID = getFreeBuilder()
     if consID == 0 then
       echo("    no free constructors found!")
-      return
+      break;
     end
 
     local consDefID = spGetUnitDefID(consID)
     local consDef = UnitDefs[consDefID]
 
-    local orderedUnits = 0;
     for i, option in ipairs(consDef.buildOptions) do
-
       if mexDefIDs[option] then
-        local mexpos = free_mexes[1]
         local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
         if buildable ~= 0 then
