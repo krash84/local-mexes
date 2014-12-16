@@ -69,8 +69,25 @@ local function print_array(A, title)
 	print(s);
 	Spring.Echo(s)
 end
-
-;
+local function print_matrix(m, title)
+	if title ~= nil then echo(title) end
+	for j = 1, #m do
+		echo (j.."  "..table.concat(m[j], ", "))
+	end
+	echo('')
+end
+local function print_freemexes()
+	echo("Free mexes: ")
+	for i, mexpos in ipairs(free_mexes) do
+		echo("mex "..i.." - "..mexpos[1]..", "..mexpos[2])
+	end
+	echo('')
+end
+local function print_map(m, title)
+	for k, v in pairs(m) do
+		echo (title.."["..k.."]".." = "..v)
+	end
+end
 
 -- return the convex hull for the set of points
 -- @param A Array of
@@ -272,6 +289,118 @@ function widget:DrawWorldPreUnit()
 	glDepthTest(false)
 end
 
+-- based on Andrew Lopatin's C++ implementation of "hungarian" algorithm
+-- for the assignment problem: http://e-maxx.ru/algo/assignment_hungary
+local function lopatin(a)
+	local n = #a
+	local m = #a[1] -- TODO !! if 0
+	local INF = 100000000
+
+	local function vec(size, val)
+		local v = {}
+		for i = 1, size do v[i] = val end
+		return v
+	end
+
+	local u = vec(n+1,0)
+	local v = vec(m+1,0)
+	local p = vec(m+1,1)
+	local way = vec(m+1,0)
+
+	for i = 1, n do
+		p[1] = i
+		local j0 = 1
+		local minv = vec(m+1, INF)
+		local used = vec(m+1, false)
+
+		repeat
+			used[j0] = true
+			local i0 = p[j0]
+			local delta = INF
+			local j1
+			for j = 2, m do
+				if used[j] ~= true then
+					local cur = a[i0][j]-u[i0]-v[j]
+					if cur < minv[j] then
+						minv[j] = cur
+						way[j] = j0
+					end
+					if minv[j] < delta then
+						delta = minv[j]
+						j1 = j
+					end
+				end
+			end
+			for j = 1, m do
+				if used[j] == true then
+					u[p[j]] = u[p[j]] + delta
+					v[j] = v[j] - delta
+				else
+					minv[j] = minv[j] - delta
+				end
+				j0=j1
+			end
+		until p[j0] == 1
+
+		repeat
+			local j1 = way[j0]
+			p[j0] = p[j1]
+			j0 = j1
+		until j0 == 1
+	end
+
+	local ans = {}
+	for j=2, m do
+		ans[p[j]] = j
+	end
+	return ans
+end
+
+local function createMatrix(nrows, ncols, value)
+	local M = {}
+	for r = 1, nrows do
+		M[r] = {}
+		for c = 1, ncols do
+			M[r][c] = value
+			--echo ("r "..r..", c "..c)
+		end
+		--echo (table.concat(M[r],", "))
+	end
+	return M
+end
+
+local function getBuildingCosts(builderIds, mexPositions)
+	--print_array(builderIds, "ids")
+	--print_freemexes(mexPositions)
+
+	--echo ("msize "..#mexPositions)
+
+	local INF = 10000000
+	local n = #builderIds
+	local m = #mexPositions
+	echo ("n = "..n.." , m = ".. m)
+	local matrSize = n+1
+
+	if n < m then
+		matrSize = m+1
+	end
+
+	local costs = createMatrix(matrSize, matrSize, INF)
+	print_matrix(costs, "Initial costs:")
+
+	for j, consId in ipairs(builderIds) do
+		for i, mexPos in ipairs(mexPositions) do
+			local x, y, z = Spring.GetUnitPosition(consId)
+			local dx = mexPos[1] - x
+			local dz = mexPos[2] - z
+			local dist = math.sqrt(dx*dx + dz*dz)
+			costs[j+1][i+1] = dist
+		end
+	end
+
+	return costs
+end
+
 -- comment: 2 or more constructors begin to build 1 mex because it is
 -- considered as "free" until the creation of the extractor is finished.
 local function buildMexes()
@@ -284,16 +413,29 @@ local function buildMexes()
 	end
 
 	if #freeBuilders == 0 then
-		--echo("    no free constructors found!")
+		echo("    no free constructors found!")
 		return
 	end
 
-	--if #free_mexes > 0 then
-	for j, mexpos in ipairs(free_mexes) do
-		if j > #freeBuilders then break end
-		--echo ("processing mex .. "..j.." "..mexpos[1]..", "..mexpos[2])
+	local buildingCosts = getBuildingCosts(freeBuilders, free_mexes);
+	print_matrix(buildingCosts, "Building costs:")
 
-		local consID = freeBuilders[j]
+	-- найти такое распределение строителей по мексам, при котором сумма рсстояний от
+	-- строителя до соотв. мекса будет минимальной из возможных вариантов
+	-- это т.н. "задача о назначениях"
+	local builderMexes = lopatin(buildingCosts)
+	print_map(builderMexes, "builder mexes")
+
+	--if #free_mexes > 0 then
+	--for j, mexpos in ipairs(free_mexes) do
+	for j, consID in ipairs(freeBuilders) do
+	--for consID, mexpos in pairs(builderMexes) do
+		--if j > #freeBuilders then break end
+		--echo ("processing mex .. "..j.." "..mexpos[1]..", "..mexpos[2]
+		--echo (builderMexes[j+1])
+		local mexpos = free_mexes[builderMexes[j+1]-1]
+
+		--local consID = freeBuilders[j]
 		local consDefID = spGetUnitDefID(consID)
 		local consDef = UnitDefs[consDefID]
 
@@ -304,7 +446,7 @@ local function buildMexes()
 				local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
 				if buildable ~= 0 then
-					--echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
+					echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
 					Spring.GiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
 					break;
 				end
@@ -368,6 +510,7 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
 
+	echo ("Unit finished!")
 	if #free_mexes > 0 then
 		buildMexes()
 	end
