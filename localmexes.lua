@@ -362,23 +362,15 @@ local function createMatrix(nrows, ncols, value)
 		M[r] = {}
 		for c = 1, ncols do
 			M[r][c] = value
-			--echo ("r "..r..", c "..c)
 		end
-		--echo (table.concat(M[r],", "))
 	end
 	return M
 end
 
 local function getBuildingCosts(builderIds, mexPositions)
-	--print_array(builderIds, "ids")
-	--print_freemexes(mexPositions)
-
-	--echo ("msize "..#mexPositions)
-
 	local INF = 10000000
 	local n = #builderIds
 	local m = #mexPositions
-	echo ("n = "..n.." , m = ".. m)
 	local matrSize = n+1
 
 	if n < m then
@@ -386,7 +378,7 @@ local function getBuildingCosts(builderIds, mexPositions)
 	end
 
 	local costs = createMatrix(matrSize, matrSize, INF)
-	print_matrix(costs, "Initial costs:")
+	--print_matrix(costs, "Initial costs:")
 
 	for j, consId in ipairs(builderIds) do
 		for i, mexPos in ipairs(mexPositions) do
@@ -413,40 +405,33 @@ local function buildMexes()
 	end
 
 	if #freeBuilders == 0 then
-		echo("    no free constructors found!")
 		return
 	end
 
 	local buildingCosts = getBuildingCosts(freeBuilders, free_mexes);
-	print_matrix(buildingCosts, "Building costs:")
+	--print_matrix(buildingCosts, "Building costs:")
 
 	-- найти такое распределение строителей по мексам, при котором сумма рсстояний от
 	-- строителя до соотв. мекса будет минимальной из возможных вариантов
 	-- это т.н. "задача о назначениях"
 	local builderMexes = lopatin(buildingCosts)
-	print_map(builderMexes, "builder mexes")
+	--print_map(builderMexes, "builder mexes")
 
-	--if #free_mexes > 0 then
-	--for j, mexpos in ipairs(free_mexes) do
 	for j, consID in ipairs(freeBuilders) do
-	--for consID, mexpos in pairs(builderMexes) do
-		--if j > #freeBuilders then break end
-		--echo ("processing mex .. "..j.." "..mexpos[1]..", "..mexpos[2]
-		--echo (builderMexes[j+1])
+
+		if (builderMexes[j+1]-1 > #free_mexes) then break end
 		local mexpos = free_mexes[builderMexes[j+1]-1]
 
-		--local consID = freeBuilders[j]
 		local consDefID = spGetUnitDefID(consID)
 		local consDef = UnitDefs[consDefID]
 
 		for i, option in ipairs(consDef.buildOptions) do
 
 			if mexDefIDs[option] then
-				--local mexpos = free_mexes[1]
 				local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
 				if buildable ~= 0 then
-					echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
+					--echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
 					Spring.GiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
 					break;
 				end
@@ -510,7 +495,6 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
 
-	echo ("Unit finished!")
 	if #free_mexes > 0 then
 		buildMexes()
 	end
