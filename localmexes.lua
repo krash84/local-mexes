@@ -13,7 +13,7 @@
 function widget:GetInfo()
 	return {
 		name = "Local Mexes",
-		desc = "Watches for the mexes inside the perimeter of the base to be filled with metal extractors",
+		desc = "Watches for the mexes inside the perimeter of the base to be filled with metal extractors 111",
 		author = "jetbird",
 		date = "Oct 27, 2014",
 		license = "GNU GPL, v3",
@@ -534,8 +534,11 @@ function widget:Initialize()
 		Spring.Echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
 		widgetHandler:RemoveWidget(self)
 	end
-	
+
+	local playerID = spGetMyPlayerID()
+	local _, _, spec, _, _, _, _, _ = spGetPlayerInfo(playerID)
 	if spec == true then
+		Spring.Echo("<Local Mexes> Spectator mode. Widget removed")
 		widgetHandler:RemoveWidget(self)
 	end
 
