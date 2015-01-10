@@ -534,6 +534,10 @@ function widget:Initialize()
 		Spring.Echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
 		widgetHandler:RemoveWidget(self)
 	end
+	
+	if spec == true then
+		widgetHandler:RemoveWidget(self)
+	end
 
 	mexDefIDs[UnitDefNames['armmex'].id] = UnitDefNames['armmex'].id
 	mexDefIDs[UnitDefNames['cormex'].id] = UnitDefNames['cormex'].id
