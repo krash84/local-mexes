@@ -13,7 +13,7 @@
 function widget:GetInfo()
 	return {
 		name = "Local Mexes",
-		desc = "Watches for the mexes inside the perimeter of the base to be filled with metal extractors 111",
+		desc = "Watches for the mexes inside the perimeter of the base to be filled with metal extractors",
 		author = "jetbird",
 		date = "Oct 27, 2014",
 		license = "GNU GPL, v3",
@@ -51,6 +51,8 @@ local buildings = {} -- player's buildings
 local constructors = {} -- {constructor id => true/nil} player's constructors
 local metalSpots = {}
 local mexDefIDs = {} -- {ud => ud}
+local armComUDId = UnitDefNames["armcom"].id
+local coreComUDId = UnitDefNames["corcom"].id
 
 local function print_array(A, title)
 	local s = "";
@@ -271,20 +273,20 @@ end
 function widget:DrawWorldPreUnit()
 	glLineWidth(3.0)
 	glDepthTest(true)
-	glColor(1, 0, 0, .4)
+	glColor(1, 0, 0, .2)
 	for i, pos in ipairs(perimeter) do
-		glDrawGroundCircle(pos[1], 20, pos[2], 100, 100)
+		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
 	end
 
-	glColor(0, 1, 0, .4)
-	for i, pos in ipairs(local_mexes) do
-		glDrawGroundCircle(pos[1], 20, pos[2], 100, 100)
-	end
-
-	glColor(0, 0, 1, 0.5)
-	for i, pos in ipairs(free_mexes) do
-		glDrawGroundCircle(pos[1], 20, pos[2], 100, 100)
-	end
+--	glColor(0, 1, 0, .3)
+--	for i, pos in ipairs(local_mexes) do
+--		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
+--	end
+--
+--	glColor(0, 0, 1, .3)
+--	for i, pos in ipairs(free_mexes) do
+--		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
+--	end
 
 	glDepthTest(false)
 end
@@ -408,34 +410,37 @@ local function buildMexes()
 		return
 	end
 
-	local buildingCosts = getBuildingCosts(freeBuilders, free_mexes);
-	--print_matrix(buildingCosts, "Building costs:")
+	--print_array(freeBuilders, "free builders");
 
-	-- найти такое распределение строителей по мексам, при котором сумма рсстояний от
-	-- строителя до соотв. мекса будет минимальной из возможных вариантов
-	-- это т.н. "задача о назначениях"
+	local buildingCosts = getBuildingCosts(freeBuilders, free_mexes);
+	--print_matrix(buildingCosts, "Building costs:");
+
+	-- assign mexes to builders
 	local builderMexes = lopatin(buildingCosts)
 	--print_map(builderMexes, "builder mexes")
 
 	for j, consID in ipairs(freeBuilders) do
 
-		if (builderMexes[j+1]-1 > #free_mexes) then break end
-		local mexpos = free_mexes[builderMexes[j+1]-1]
+		if (builderMexes[j+1]-1 <= #free_mexes) then
+			local mexpos = free_mexes[builderMexes[j+1]-1]
 
-		local consDefID = spGetUnitDefID(consID)
-		local consDef = UnitDefs[consDefID]
+			local consDefID = spGetUnitDefID(consID)
+			local consDef = UnitDefs[consDefID]
 
-		for i, option in ipairs(consDef.buildOptions) do
+			for i, option in ipairs(consDef.buildOptions) do
 
-			if mexDefIDs[option] then
-				local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
+				if mexDefIDs[option] then
+					local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
-				if buildable ~= 0 then
-					--echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
-					Spring.GiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
-					break;
+					if buildable ~= 0 then
+						--echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
+						Spring.GiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
+						break;
+					end
 				end
 			end
+		--else
+			--echo ("builderMexes["..j.."+1]-1 ("..(builderMexes[j+1]-1)..") > "..(#free_mexes))
 		end
 	end
 end
@@ -444,7 +449,8 @@ local function validConstructor(uid)
 	local udid = spGetUnitDefID(uid)
 	local ud = UnitDefs[udid]
 
-	if ud == nil then
+	-- exclude commanders
+	if ud == nil or udid == armComUDId or udid == coreComUDId then
 		return false
 	end
 
@@ -480,6 +486,12 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam)
 	end
 end
 
+function widget:GameFrame(frameNum)
+	if (frameNum % 128 ) == 0 and #free_mexes > 0 then
+		buildMexes()
+	end
+end
+
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
 	if (unitTeam ~= spGetMyTeamID()) then
 		return
@@ -495,9 +507,9 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
 
-	if #free_mexes > 0 then
-		buildMexes()
-	end
+--	if #free_mexes > 0 then
+--		buildMexes()
+--	end
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
@@ -513,9 +525,9 @@ function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
 
-	if #free_mexes > 0 then
-		buildMexes()
-	end
+--	if #free_mexes > 0 then
+--		buildMexes()
+--	end
 end
 
 
@@ -554,6 +566,7 @@ function widget:Initialize()
 	end
 
 	metalSpots = WG.metalSpots
+
 	perimeter = calcPerimeter()
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
