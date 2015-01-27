@@ -6,7 +6,7 @@
 -- author:  Leonid Krashenko <leonid.krashenko@gmail.com>
 --
 -- Copyright (C) 2014.
--- Licensed under the terms of the GNU GPL, v3.
+-- Licensed under the terms of the GNU GPL, v2.
 --
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
@@ -16,7 +16,7 @@ function widget:GetInfo()
 		desc = "Watches for the mexes inside the perimeter of the base to be filled with metal extractors",
 		author = "jetbird",
 		date = "Oct 27, 2014",
-		license = "GNU GPL, v3",
+		license = "GNU GPL, v2",
 		layer = 0,
 		enabled = true --  loaded by default?
 	}
