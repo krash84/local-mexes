@@ -1,6 +1,6 @@
-# springrts_widgets
+# Local mexes
 
-Hello.
+Hello!
 
 Here are some widgets for SpringRTS game.
 
