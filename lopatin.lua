@@ -1,5 +1,7 @@
 -- based on Andrew Lopatin's C++ implementation of "hungarian" algorithm
 -- for the assignment problem: http://e-maxx.ru/algo/assignment_hungary
+-- additional info: http://acm.mipt.ru/twiki/bin/view/Algorithms/HungarianAlgorithmCPP
+-- and implementation in C++: https://github.com/catbaxter/algorithms
 
 local function lopatin(a)
 	local n = #a
