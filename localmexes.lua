@@ -40,11 +40,14 @@ local spGetUnitDefID = Spring.GetUnitDefID
 local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
 local spGetGroundInfo = Spring.GetGroundInfo
 local spGetGroundHeight = Spring.GetGroundHeight
+local spMarkerAddPoint = Spring.MarkerAddPoint
 local echo = Spring.Echo
 
 local local_mexes = {} -- array of local mexes
 local free_mexes = {} -- {{x1,z1}, {x2,z2} ... {xn,zn}}
-local proxessing_mexes = {} -- {id1, id2, ..., id_n}
+local processing_mexes = {} -- {id1, id2, ..., id_n}
+local ordered_mexes = {} -- {constructor_id => {x, y}, ...}
+
 local perimeter = {}
 local units = {} -- player's units
 local buildings = {} -- player's buildings
@@ -190,6 +193,7 @@ local function getLocalMexes(mexes, perimeter)
 	return local_mexes
 end
 
+--[[
 local function getFreeBuilder()
 	for uid, v in pairs(constructors) do
 		local ordersQueue = Spring.GetUnitCommands(uid, 1)
@@ -199,6 +203,7 @@ local function getFreeBuilder()
 	end
 	return 0
 end
+--]]
 
 local function getExtractors()
 	local extractors = {}
@@ -220,8 +225,6 @@ local function getFreeMexes(localMexes)
 	local closedMexes = {} --
 	for i, epos in ipairs(extractors) do
 		for j, pos in ipairs(localMexes) do
-			--echo("Pos: " .. pos[1]..','..pos[2])
-			--echo("EPos: " .. epos[1]..','..epos[2])
 			local dx = epos[1] - pos[1]
 			local dz = epos[2] - pos[2]
 			local dist = math.sqrt(dx * dx + dz * dz)
@@ -235,15 +238,14 @@ local function getFreeMexes(localMexes)
 
 	for i, pos in ipairs(localMexes) do
 		local isProcessing = false
-		for j, pmpos in ipairs(proxessing_mexes) do
+		for j, pmpos in ipairs(processing_mexes) do
 			if pos[1] == pmpos[1] and pos[2] == pmpos[2] then
 				isProcessing = true
-				echo("skipping processing mex")
 				break
 			end
 		end
-
-		if closedMexes[i] == nil and not isProcessing then
+		
+		if closedMexes[i] == nil and (not isProcessing) then
 			table.insert(freeMexes, pos)
 		end
 	end
@@ -287,6 +289,11 @@ function widget:DrawWorldPreUnit()
 --	for i, pos in ipairs(free_mexes) do
 --		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
 --	end
+	
+	glColor(0, 0, 1, 0.5)
+	for consID, orderedMexPos in pairs(ordered_mexes) do
+		glDrawGroundCircle(orderedMexPos[1], orderedMexPos[2], orderedMexPos[3], 50, 16)
+	end
 
 	glDepthTest(false)
 end
@@ -395,8 +402,23 @@ local function getBuildingCosts(builderIds, mexPositions)
 	return costs
 end
 
--- comment: 2 or more constructors begin to build 1 mex because it is
--- considered as "free" until the creation of the extractor is finished.
+function filterNotOrdered(free_mexes, ordered_mexes)
+	local remove = {}
+	for i, fmpos in ipairs(free_mexes) do
+		for consID, ompos in pairs(ordered_mexes) do
+			if fmpos[1] == ompos[1] and fmpos[2] == ompos[3] then
+				remove[i] = true;
+			end
+		end
+	end
+	for i = #free_mexes, 1, -1 do
+		if remove[i] then
+			table.remove(free_mexes, i)
+		end
+	end
+	return free_mexes
+end
+
 local function buildMexes()
 	local freeBuilders = {}
 	for consID, v in pairs(constructors) do
@@ -411,6 +433,7 @@ local function buildMexes()
 	end
 
 	--print_array(freeBuilders, "free builders");
+	free_mexes = filterNotOrdered(free_mexes, ordered_mexes)
 
 	local buildingCosts = getBuildingCosts(freeBuilders, free_mexes);
 	--print_matrix(buildingCosts, "Building costs:");
@@ -433,7 +456,7 @@ local function buildMexes()
 					local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
 					if buildable ~= 0 then
-						--echo("    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
+						--echo("------    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
 						Spring.GiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
 						break;
 					end
@@ -474,7 +497,7 @@ local function dispatchUnit(unitID, unitDefID)
 	units[unitID] = true
 end
 
-function widget:UnitCreated(unitID, unitDefID, unitTeam)
+function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
 	if (unitTeam ~= spGetMyTeamID()) then
 		return
 	end
@@ -482,7 +505,8 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam)
 	-- if we are building the mex
 	if mexDefIDs[unitDefID] then
 		local x, y, z = Spring.GetUnitPosition(unitID)
-		proxessing_mexes[unitID] = { x, z }
+		processing_mexes[unitID] = { x, z }
+		ordered_mexes[builderID] = nil
 	end
 end
 
@@ -492,38 +516,95 @@ function widget:GameFrame(frameNum)
 	end
 end
 
+function updateFreeMexes()
+	perimeter = calcPerimeter()
+	local_mexes = getLocalMexes(metalSpots, perimeter)
+	free_mexes = getFreeMexes(local_mexes)
+end
+
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
 	if (unitTeam ~= spGetMyTeamID()) then
 		return
 	end
 
-	if proxessing_mexes[unitID] then
-		proxessing_mexes[unitID] = nil
+	if processing_mexes[unitID] then
+		processing_mexes[unitID] = nil
 	end
+	ordered_mexes[unitID] = nil
 
 	dispatchUnit(unitID, unitDefID)
 
-	perimeter = calcPerimeter()
-	local_mexes = getLocalMexes(metalSpots, perimeter)
-	free_mexes = getFreeMexes(local_mexes)
+	updateFreeMexes()
 
 --	if #free_mexes > 0 then
 --		buildMexes()
 --	end
 end
 
-function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
-	if proxessing_mexes[unitID] then
-		proxessing_mexes[unitID] = nil
+function notifyCommand(cmdID, cmdParams, cmdOptions)
+	if mexDefIDs[-cmdID] == -cmdID then
+		spMarkerAddPoint(cmdOptions[1], cmdOptions[2], cmdOptions[3], "mex", true)
 	end
+end
+
+function unitHasMexOrder(unitID)
+	local queue = Spring.GetCommandQueue(unitID,20)
+	for i, cmd in ipairs(queue) do
+		for _, mexCmdID in pairs(mexDefIDs) do
+			if cmd.id == -mexCmdID then
+				return cmd.params
+			end
+		end
+	end
+	return false
+end
+
+--[[
+function unitBuildsMex(unitID)
+	local queue = Spring.GetFullBuildQueue (unitID)
+	for _, udefCounts in pairs(queue) do
+		for __, mexUdid in pairs(mexDefIDs) do
+			--echo ("mexUdid: "..mexUdid);
+			if (udefCounts[mexUdid] ~= nil) then
+				return true
+			end
+		end
+	end
+	return false
+end
+--]]
+
+function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOptions)
+	
+	--[[
+	local descs = Spring.GetUnitCmdDescs(unitID)
+	local descid = Spring.FindUnitCmdDesc(unitID, cmdID)
+	if descid then
+		local cmddesc = descs[descid]
+	end
+	--]]
+	
+	local orderedMexPos = unitHasMexOrder(unitID)
+	if orderedMexPos ~= false or mexDefIDs[-cmdID] == -cmdID then
+		if mexDefIDs[-cmdID] == -cmdID then
+			ordered_mexes[unitID] = cmdOptions -- save ordered mex coords
+		else
+			ordered_mexes[unitID] = orderedMexPos
+		end
+	else
+		ordered_mexes[unitID] = nil -- unit gets other command (or there was no mex ordered ever)
+	end
+end
+
+function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
+	processing_mexes[unitID] = nil
+	ordered_mexes[unitID] = nil
 
 	units[unitID] = nil
 	buildings[unitID] = nil
 	constructors[unitID] = nil
 
-	perimeter = calcPerimeter()
-	local_mexes = getLocalMexes(metalSpots, perimeter)
-	free_mexes = getFreeMexes(local_mexes)
+	updateFreeMexes()
 
 --	if #free_mexes > 0 then
 --		buildMexes()
