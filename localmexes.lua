@@ -272,6 +272,8 @@ local function calcPerimeter()
 	return coords
 end
 
+--[[
+-- for debug purposes
 function widget:DrawWorldPreUnit()
 	glLineWidth(3.0)
 	glDepthTest(true)
@@ -297,6 +299,7 @@ function widget:DrawWorldPreUnit()
 
 	glDepthTest(false)
 end
+--]]
 
 -- based on Andrew Lopatin's C++ implementation of "hungarian" algorithm
 -- for the assignment problem: http://e-maxx.ru/algo/assignment_hungary
