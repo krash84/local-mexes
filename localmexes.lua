@@ -18,7 +18,8 @@ function widget:GetInfo()
 		date = "Oct 27, 2014",
 		license = "GNU GPL, v2",
 		layer = 0,
-		enabled = true --  loaded by default?
+		enabled = true, --  loaded by default?
+		version = "1.1b"
 	}
 end
 
@@ -35,6 +36,7 @@ local spGetSpectatingState = Spring.GetSpectatingState
 local spGetMyPlayerID = Spring.GetMyPlayerID
 local spGetPlayerInfo = Spring.GetPlayerInfo
 local spGetMyTeamID = Spring.GetMyTeamID
+local spGetMyAllyTeamID = Spring.GetMyAllyTeamID
 local spGetTeamUnits = Spring.GetTeamUnits
 local spGetUnitDefID = Spring.GetUnitDefID
 local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
@@ -272,7 +274,7 @@ local function calcPerimeter()
 	return coords
 end
 
---[[
+--
 -- for debug purposes
 function widget:DrawWorldPreUnit()
 	glLineWidth(3.0)
@@ -500,8 +502,19 @@ local function dispatchUnit(unitID, unitDefID)
 	units[unitID] = true
 end
 
+local function isAllyTeam(teamID)
+	local teamIDs = Spring.GetAllyTeamList()
+	for _, allyTeamID in ipairs(teamIDs) do
+		if allyTeamID == teamID then
+			return true
+		end
+	end
+	return false
+end
+
 function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
-	if (unitTeam ~= spGetMyTeamID()) then
+	if (unitTeam ~= spGetMyTeamID() and not isAllyTeam(unitTeam)) then
+		--echo ("not ally team")
 		return
 	end
 
@@ -526,7 +539,7 @@ function updateFreeMexes()
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-	if (unitTeam ~= spGetMyTeamID()) then
+	if (unitTeam ~= spGetMyTeamID() and not isAllyTeam(unitTeam)) then
 		return
 	end
 
@@ -632,11 +645,13 @@ function widget:Initialize()
 	end
 
 	local playerID = spGetMyPlayerID()
-	local _, _, spec, _, _, _, _, _ = spGetPlayerInfo(playerID)
+	local playerName, _, spec, _, _, _, _, _ = spGetPlayerInfo(playerID)
 	if spec == true then
 		Spring.Echo("<Local Mexes> Spectator mode. Widget removed")
-		widgetHandler:RemoveWidget(self)
+		--widgetHandler:RemoveWidget(self) --TODO
 	end
+	
+	echo ("<Local Mexes> Current player: "..playerName)
 
 	mexDefIDs[UnitDefNames['armmex'].id] = UnitDefNames['armmex'].id
 	mexDefIDs[UnitDefNames['cormex'].id] = UnitDefNames['cormex'].id
@@ -644,7 +659,8 @@ function widget:Initialize()
 	mexDefIDs[UnitDefNames['coruwmex'].id] = UnitDefNames['coruwmex'].id
 
 
-	units = spGetTeamUnits(spGetMyTeamID())
+	--units = spGetTeamUnits(spGetMyTeamID())
+	units = spGetAllUnits()
 	for _, uid in ipairs(units) do
 		dispatchUnit(uid, spGetUnitDefID(uid))
 	end
