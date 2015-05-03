@@ -8,6 +8,8 @@
 -- Copyright (C) 2014.
 -- Licensed under the terms of the GNU GPL, v2.
 --
+
+-- The drawLine function is taken from the Commands FX widget
 --------------------------------------------------------------------------------
 --------------------------------------------------------------------------------
 function widget:GetInfo()
@@ -50,6 +52,9 @@ local free_mexes = {} -- {{x1,z1}, {x2,z2} ... {xn,zn}}
 local processing_mexes = {} -- {id1, id2, ..., id_n}
 local ordered_mexes = {} -- {constructor_id => {x, y}, ...}
 
+local lineWidth = 6
+
+local perimeterDisplayList = 0;
 local perimeter = {}
 local units = {} -- player's units
 local buildings = {} -- player's buildings
@@ -274,10 +279,52 @@ local function calcPerimeter()
 	return coords
 end
 
+local function drawLine(x1,y1,z1, x2,y2,z2, width) -- long thin rectangle
+    local theta	= (x1~=x2) and math.atan((z2-z1)/(x2-x1)) or math.pi/2
+    local zOffset = math.cos(math.pi-theta) * width / 2
+    local xOffset = math.sin(math.pi-theta) * width / 2
+    
+    gl.Vertex(x1+xOffset, y1, z1+zOffset)
+    gl.Vertex(x1-xOffset, y1, z1-zOffset)
+    
+    gl.Vertex(x2-xOffset, y2, z2-zOffset)
+    gl.Vertex(x2+xOffset, y2, z2+zOffset)	
+end
+
+local function drawPerimeter()
+	--gl.BeginEnd(GL.QUADS, DrawLine, prevX,prevY,prevZ, commands[i].set_target.params[1], commands[i].set_target.params[2], commands[i].set_target.params[3], lineWidth) 
+	local shapeCoords = {}
+	local oldpos = nil;
+	
+	--[[
+	local p1 = perimeter[1]
+	local p2 = perimeter[2]
+	gl.BeginEnd(GL.QUADS, drawLine, p1[1], 10, p1[2], p2[1], 10, p2[2], lineWidth) 
+	--]]
+	
+	if #perimeter < 3 then
+		return
+	end
+	
+	local p1 = perimeter[1]
+	local p2 = {}
+	for i = 2, #perimeter do
+		p2 = perimeter[i]
+		gl.BeginEnd(GL.QUADS, drawLine, p1[1], 10, p1[2], p2[1], 10, p2[2], lineWidth) 
+		p1 = p2
+	end
+	p1 = perimeter[1]
+	gl.BeginEnd(GL.QUADS, drawLine, p1[1], 10, p1[2], p2[1], 10, p2[2], lineWidth) 
+	
+end
+
 --
 -- for debug purposes
 function widget:DrawWorldPreUnit()
-	glLineWidth(3.0)
+	
+	gl.Color(1, 1, 1, 0.5)
+	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+	--[[glLineWidth(3.0)
 	glDepthTest(true)
 	glColor(1, 0, 0, .2)
 	for i, pos in ipairs(perimeter) do
@@ -297,9 +344,16 @@ function widget:DrawWorldPreUnit()
 	glColor(0, 0, 1, 0.5)
 	for consID, orderedMexPos in pairs(ordered_mexes) do
 		glDrawGroundCircle(orderedMexPos[1], orderedMexPos[2], orderedMexPos[3], 50, 16)
-	end
-
+	end--]]
 	glDepthTest(false)
+
+	gl.CallList(perimeterDisplayList)
+	--[[local p1 = perimeter[1]
+	local p2 = perimeter[2]
+	--drawLine()
+	--gl.BeginEnd(GL.QUADS, drawLine, p1[1], p1[2], 100, p2[1], p2[2], 100, lineWidth)
+	gl.BeginEnd(GL.QUADS, drawLine, p1[1], 10, p1[2], p2[1], 10, p2[2], lineWidth) --]]
+	
 end
 --]]
 
@@ -536,6 +590,8 @@ function updateFreeMexes()
 	perimeter = calcPerimeter()
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
+	
+	perimeterDisplayList = gl.CreateList(drawPerimeter);
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
@@ -550,7 +606,7 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 
 	dispatchUnit(unitID, unitDefID)
 
-	updateFreeMexes()
+	updateFreeMexes() -- TODO update only when a building finished
 
 --	if #free_mexes > 0 then
 --		buildMexes()
@@ -620,7 +676,7 @@ function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
 	buildings[unitID] = nil
 	constructors[unitID] = nil
 
-	updateFreeMexes()
+	updateFreeMexes() -- TODO update only when a building destroyed
 
 --	if #free_mexes > 0 then
 --		buildMexes()
@@ -667,8 +723,6 @@ function widget:Initialize()
 
 	metalSpots = WG.metalSpots
 
-	perimeter = calcPerimeter()
-	local_mexes = getLocalMexes(metalSpots, perimeter)
-	free_mexes = getFreeMexes(local_mexes)
+	updateFreeMexes()
 end
 
