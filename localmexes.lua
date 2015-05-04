@@ -298,7 +298,7 @@ end
 --
 function widget:DrawWorldPreUnit()
 	
-	gl.Color(1, 1, 1, 0.5)
+	gl.Color(1, 1, 1, 0.7)
 	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
 	--[[
 	glLineWidth(3.0)
@@ -538,9 +538,18 @@ local function isAllyTeam(teamID)
 	return false
 end
 
+local function notifyNotAlly(unitID)
+	local ud = UnitDefs[Spring.GetUnitDefID(unitID)]
+	if not ud.isBuilding then
+		return
+	end
+	local x, y, z = Spring.GetUnitPosition(unitID)
+	spMarkerAddPoint(x, y, z, "not ally", true)
+end
+
 function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
-	if (unitTeam ~= spGetMyTeamID() and not isAllyTeam(unitTeam)) then
-		--echo ("not ally team")
+	if (unitTeam ~= spGetMyTeamID()) then
+		--notifyNotAlly(unitID)
 		return
 	end
 
@@ -567,7 +576,8 @@ function updateFreeMexes()
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-	if (unitTeam ~= spGetMyTeamID() and not isAllyTeam(unitTeam)) then
+	if (unitTeam ~= spGetMyTeamID()) then
+		--notifyNotAlly(unitID)
 		return
 	end
 
@@ -632,6 +642,11 @@ function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOpti
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
+	if (unitTeam ~= spGetMyTeamID()) then
+		--notifyNotAlly(unitID)
+		return
+	end
+	
 	processing_mexes[unitID] = nil
 	ordered_mexes[unitID] = nil
 
@@ -661,15 +676,17 @@ function widget:Initialize()
 		Spring.Echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
 		widgetHandler:RemoveWidget(self)
 	end
+	metalSpots = WG.metalSpots
 
 	local playerID = spGetMyPlayerID()
 	local playerName, _, spec, _, _, _, _, _ = spGetPlayerInfo(playerID)
 	if spec == true then
 		Spring.Echo("<Local Mexes> Spectator mode. Widget removed")
 		widgetHandler:RemoveWidget(self)
+		return
 	end
 	
-	echo ("<Local Mexes> Current player: "..playerName)
+	--echo ("<Local Mexes> Current player: "..playerName)
 
 	mexDefIDs[UnitDefNames['armmex'].id] = UnitDefNames['armmex'].id
 	mexDefIDs[UnitDefNames['cormex'].id] = UnitDefNames['cormex'].id
@@ -680,10 +697,11 @@ function widget:Initialize()
 	--units = spGetTeamUnits(spGetMyTeamID())
 	units = spGetAllUnits()
 	for _, uid in ipairs(units) do
-		dispatchUnit(uid, spGetUnitDefID(uid))
+		if not uid then
+			dispatchUnit(uid, spGetUnitDefID(uid))
+		end
+			
 	end
-
-	metalSpots = WG.metalSpots
 
 	updateFreeMexes()
 end
