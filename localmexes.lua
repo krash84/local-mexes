@@ -32,8 +32,10 @@ local glBeginEnd = gl.BeginEnd
 local glLineWidth = gl.LineWidth
 local glShape = gl.Shape
 local glDrawGroundCircle = gl.DrawGroundCircle
-local GetUnitDefID = Spring.GetUnitDefID
+--local GetUnitDefID = Spring.GetUnitDefID
 local spGetAllUnits = Spring.GetAllUnits
+local spGetUnitTeam = Spring.GetUnitTeam
+local spGetTeamInfo = Spring.GetTeamInfo
 local spGetSpectatingState = Spring.GetSpectatingState
 local spGetMyPlayerID = Spring.GetMyPlayerID
 local spGetPlayerInfo = Spring.GetPlayerInfo
@@ -63,6 +65,7 @@ local metalSpots = {}
 local mexDefIDs = {} -- {ud => ud}
 local armComUDId = UnitDefNames["armcom"].id
 local coreComUDId = UnitDefNames["corcom"].id
+local playerAllyTeam = 0
 
 local function print_array(A, title)
 	local s = "";
@@ -298,8 +301,7 @@ end
 --
 function widget:DrawWorldPreUnit()
 	
-	gl.Color(1, 1, 1, 0.7)
-	gl.Blending(GL.SRC_ALPHA, GL.ONE_MINUS_SRC_ALPHA)
+	gl.Color(1, 1, 0.7, 0.3)
 	--[[
 	glLineWidth(3.0)
 	glDepthTest(true)
@@ -515,7 +517,30 @@ local function validConstructor(uid)
 	return false
 end
 
-local function dispatchUnit(unitID, unitDefID)
+--[[local function notifyNotAlly(unitID)
+	echo ("uid: "..unitID)
+	local ud = UnitDefs[Spring.GetUnitDefID(unitID)]
+	if not ud.isBuilding then
+		return
+	end
+	local x, y, z = Spring.GetUnitPosition(unitID)
+	spMarkerAddPoint(x, y, z, "not ally", true)
+end--]]
+
+
+local function dispatchUnit(unitID)
+	if not unitID or unitID == false or unitID == true then 
+		return 
+	end
+	
+	local unitTeamID = spGetUnitTeam(unitID)
+	_,_,_,_,_,unitAllyTeam = spGetTeamInfo(unitTeamID)
+	if (unitAllyTeam ~= playerAllyTeam) then
+		return
+	end
+	
+	--echo ("dispatched unit: "..unitID)
+	local unitDefID = spGetUnitDefID(unitID)
 	local ud = UnitDefs[unitDefID]
 	if (ud.isBuilding) -- and (ud.onOffable) and (ud.makesMetal > 0) and (ud.energyUpkeep > 0)
 	then
@@ -538,18 +563,11 @@ local function isAllyTeam(teamID)
 	return false
 end
 
-local function notifyNotAlly(unitID)
-	local ud = UnitDefs[Spring.GetUnitDefID(unitID)]
-	if not ud.isBuilding then
-		return
-	end
-	local x, y, z = Spring.GetUnitPosition(unitID)
-	spMarkerAddPoint(x, y, z, "not ally", true)
-end
 
 function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
-	if (unitTeam ~= spGetMyTeamID()) then
-		--notifyNotAlly(unitID)
+	local unitTeamID = spGetUnitTeam(unitID)
+	_,_,_,_,_,unitAllyTeam = spGetTeamInfo(unitTeamID)
+	if (unitAllyTeam ~= playerAllyTeam) then
 		return
 	end
 
@@ -576,8 +594,9 @@ function updateFreeMexes()
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
-	if (unitTeam ~= spGetMyTeamID()) then
-		--notifyNotAlly(unitID)
+	local unitTeamID = spGetUnitTeam(unitID)
+	_,_,_,_,_,unitAllyTeam = spGetTeamInfo(unitTeamID)
+	if (unitAllyTeam ~= playerAllyTeam) then
 		return
 	end
 
@@ -586,7 +605,7 @@ function widget:UnitFinished(unitID, unitDefID, unitTeam)
 	end
 	ordered_mexes[unitID] = nil
 
-	dispatchUnit(unitID, unitDefID)
+	dispatchUnit(unitID)
 
 	local ud = UnitDefs[unitDefID]
 	if ud.isBuilding then
@@ -642,8 +661,9 @@ function widget:UnitCommand(unitID, unitDefID, teamID, cmdID, cmdParams, cmdOpti
 end
 
 function widget:UnitDestroyed(unitID, unitDefID, unitTeam)
-	if (unitTeam ~= spGetMyTeamID()) then
-		--notifyNotAlly(unitID)
+	local unitTeamID = spGetUnitTeam(unitID)
+	local _,_,_,_,_,unitAllyTeam = spGetTeamInfo(unitTeamID)
+	if (unitAllyTeam ~= playerAllyTeam) then
 		return
 	end
 	
@@ -673,34 +693,33 @@ end
 
 function widget:Initialize()
 	if not WG.metalSpots then
-		Spring.Echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
+		echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
 		widgetHandler:RemoveWidget(self)
+		return
 	end
 	metalSpots = WG.metalSpots
 
 	local playerID = spGetMyPlayerID()
-	local playerName, _, spec, _, _, _, _, _ = spGetPlayerInfo(playerID)
+	
+	local _,_,spec,_, allyTeam, _, _, _ = spGetPlayerInfo(playerID)
+	playerAllyTeam = allyTeam
+	
 	if spec == true then
-		Spring.Echo("<Local Mexes> Spectator mode. Widget removed")
+		--
+		echo("<Local Mexes> Spectator mode. Widget removed")
 		widgetHandler:RemoveWidget(self)
 		return
+		--]]
 	end
 	
-	--echo ("<Local Mexes> Current player: "..playerName)
-
 	mexDefIDs[UnitDefNames['armmex'].id] = UnitDefNames['armmex'].id
 	mexDefIDs[UnitDefNames['cormex'].id] = UnitDefNames['cormex'].id
 	mexDefIDs[UnitDefNames['armuwmex'].id] = UnitDefNames['armuwmex'].id
 	mexDefIDs[UnitDefNames['coruwmex'].id] = UnitDefNames['coruwmex'].id
 
-
-	--units = spGetTeamUnits(spGetMyTeamID())
 	units = spGetAllUnits()
-	for _, uid in ipairs(units) do
-		if not uid then
-			dispatchUnit(uid, spGetUnitDefID(uid))
-		end
-			
+	for i=1, #units-1 do
+		dispatchUnit(units[i])
 	end
 
 	updateFreeMexes()
