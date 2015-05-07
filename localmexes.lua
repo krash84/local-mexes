@@ -250,7 +250,7 @@ local function getFreeMexes(localMexes)
 	for i=1, #extractors do
 		for j=1, #localMexes do
 			local epos = extractors[i]
-			local pos = localMexes[i]
+			local pos = localMexes[j]
 			local dx = epos[1] - pos[1]
 			local dz = epos[2] - pos[2]
 			local dist = sqrt(dx * dx + dz * dz)
