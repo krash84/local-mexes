@@ -65,6 +65,11 @@ local atan = math.atan
 local pi = math.pi
 local cos = math.cos
 local sin = math.sin
+local sqrt = math.sqrt
+
+local tinsert = table.insert
+local tremove = table.remove
+local tgetn = table.getn
 
 local local_mexes = {} -- array of local mexes
 local free_mexes = {} -- {{x1,z1}, {x2,z2} ... {xn,zn}}
@@ -165,9 +170,9 @@ local function grahamscan(A)
 	--print_array(S, "Stack");
 	for i = 3, n do
 		while rotate(A[S[#S - 1]], A[S[#S]], A[P[i]]) < 0 do
-			table.remove(S, #S);
+			tremove(S, #S);
 		end;
-		table.insert(S, P[i]);
+		tinsert(S, P[i]);
 	end;
 
 	return S;
@@ -178,7 +183,7 @@ local function pointInConvexhull(A, CH)
 
 	--   http://dic.academic.ru/dic.nsf/ruwiki/209337#sel=27:1,29:14
 	--   http://acmp.ru/article.asp?id_text=170
-	function testSegmentIntersection(A, B, C, D)
+	local function testSegmentIntersection(A, B, C, D)
 		local v1, v2, v3, v4
 
 		v1 = (D[1] - C[1]) * (A[2] - C[2]) - (D[2] - C[2]) * (A[1] - C[1])
@@ -196,11 +201,11 @@ local function pointInConvexhull(A, CH)
 	--print_a(A)
 	--print_a(B)
 
-	if (testSegmentIntersection(A, B, CH[table.getn(CH)], CH[1])) then
+	if (testSegmentIntersection(A, B, CH[tgetn(CH)], CH[1])) then
 		icount = icount + 1
 	end
 
-	for i = 2, table.getn(CH) do
+	for i = 2, tgetn(CH) do
 		if (testSegmentIntersection(A, B, CH[i - 1], CH[i])) then
 			icount = icount + 1
 		end
@@ -216,12 +221,13 @@ local function getLocalMexes(mexes, perimeter)
 	end
 	for i, pos in pairs(mexes) do
 		if pointInConvexhull({ pos.x, pos.z }, perimeter) then
-			table.insert(local_mexes, { pos.x, pos.z })
+			tinsert(local_mexes, { pos.x, pos.z })
 		end
 	end
 	return local_mexes
 end
 
+-- TODO support extractors array to get rid of this function
 local function getExtractors()
 	local extractors = {}
 	for uid, v in pairs(buildings) do
@@ -229,23 +235,26 @@ local function getExtractors()
 		local ud = UnitDefs[udid]
 		local x, y, z = spGetUnitPosition(uid)
 		if ud.isExtractor then
-			table.insert(extractors, { x, z })
+			tinsert(extractors, { x, z })
 		end
 	end
 	return extractors
 end
 
+-- TODO support freeMexes array to get rid of this function
 local function getFreeMexes(localMexes)
 
 	local extractors = getExtractors()
 
 	local closedMexes = {} --
-	for i, epos in ipairs(extractors) do
-		for j, pos in ipairs(localMexes) do
+	for i=1, #extractors do
+		for j=1, #localMexes do
+			local epos = extractors[i]
+			local pos = localMexes[i]
 			local dx = epos[1] - pos[1]
 			local dz = epos[2] - pos[2]
-			local dist = math.sqrt(dx * dx + dz * dz)
-			if dist < 75 then
+			local dist = sqrt(dx * dx + dz * dz)
+			if dist < 75 then --TODO use predefined constant
 				closedMexes[j] = true
 			end
 		end
@@ -253,9 +262,11 @@ local function getFreeMexes(localMexes)
 
 	local freeMexes = {}
 
-	for i, pos in ipairs(localMexes) do
+	for i=1, #localMexes do
+		local pos = localMexes[i]
 		local isProcessing = false
-		for j, pmpos in ipairs(processing_mexes) do
+		for j=1, #processing_mexes do
+			local pmpos = processing_mexes[j]
 			if pos[1] == pmpos[1] and pos[2] == pmpos[2] then
 				isProcessing = true
 				break
@@ -263,7 +274,7 @@ local function getFreeMexes(localMexes)
 		end
 		
 		if closedMexes[i] == nil and (not isProcessing) then
-			table.insert(freeMexes, pos)
+			tinsert(freeMexes, pos)
 		end
 	end
 
@@ -277,13 +288,14 @@ local function calcPerimeter()
 		-- local ud = UnitDefs[udid]
 		local x, y, z = spGetUnitPosition(uid)
 
-		table.insert(buildingsCoords, { x, z, y })
+		tinsert(buildingsCoords, { x, z, y })
 	end
 
 	local perimeterVertices = grahamscan(buildingsCoords)
 	local coords = {}
-	for k, i in ipairs(perimeterVertices) do
-		table.insert(coords, buildingsCoords[i])
+	for j=1, #perimeterVertices do
+		local pv = perimeterVertices[j]
+		tinsert(coords, buildingsCoords[pv])
 	end
 
 	return coords
@@ -329,17 +341,20 @@ function widget:DrawWorldPreUnit()
 	glLineWidth(3.0)
 	glDepthTest(true)
 	glColor(1, 0, 0, .2)
-	for i, pos in ipairs(perimeter) do
+	for i=1, #perimeter do
+		local pos = perimeter[i]
 		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
 	end
 
 --	glColor(0, 1, 0, .3)
---	for i, pos in ipairs(local_mexes) do
+--	for i=1, #local_mexes do
+--		local pos = local_mexes[i]
 --		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
 --	end
 --
 --	glColor(0, 0, 1, .3)
---	for i, pos in ipairs(free_mexes) do
+--	for i=1, #free_mexes do
+--		local pos = free_mexes[i]
 --		glDrawGroundCircle(pos[1], 20, pos[2], 50, 16)
 --	end
 	
@@ -356,7 +371,7 @@ end
 local function lopatin(a)
 	local n = #a
 	local m = #a[1] -- TODO !! if 0
-	local INF = 100000000
+	local INF = 100000000 -- TODO use predefined maxint or something 
 
 	local function vec(size, val)
 		local v = {}
@@ -430,7 +445,7 @@ local function createMatrix(nrows, ncols, value)
 end
 
 local function getBuildingCosts(builderIds, mexPositions)
-	local INF = 10000000
+	local INF = 10000000 -- TODO use predefined maxint or something 
 	local n = #builderIds
 	local m = #mexPositions
 	local matrSize = n+1
@@ -442,12 +457,14 @@ local function getBuildingCosts(builderIds, mexPositions)
 	local costs = createMatrix(matrSize, matrSize, INF)
 	--print_matrix(costs, "Initial costs:")
 
-	for j, consId in ipairs(builderIds) do
-		for i, mexPos in ipairs(mexPositions) do
+	for j=1, #builderIds do
+		local consId = builderIds[j]
+		for i=1, #mexPositions do
+			local mexPos = mexPositions[i]
 			local x, y, z = spGetUnitPosition(consId)
 			local dx = mexPos[1] - x
 			local dz = mexPos[2] - z
-			local dist = math.sqrt(dx*dx + dz*dz)
+			local dist = sqrt(dx*dx + dz*dz)
 			costs[j+1][i+1] = dist
 		end
 	end
@@ -457,7 +474,8 @@ end
 
 function filterNotOrdered(free_mexes, ordered_mexes)
 	local remove = {}
-	for i, fmpos in ipairs(free_mexes) do
+	for i=1, #free_mexes do
+		local fmpos = free_mexes[i]
 		for consID, ompos in pairs(ordered_mexes) do
 			if fmpos[1] == ompos[1] and fmpos[2] == ompos[3] then
 				remove[i] = true;
@@ -466,7 +484,7 @@ function filterNotOrdered(free_mexes, ordered_mexes)
 	end
 	for i = #free_mexes, 1, -1 do
 		if remove[i] then
-			table.remove(free_mexes, i)
+			tremove(free_mexes, i)
 		end
 	end
 	return free_mexes
@@ -477,7 +495,7 @@ local function buildMexes()
 	for consID, v in pairs(constructors) do
 		local ordersQueue = spGetUnitCommands(consID, 1)
 		if #ordersQueue == 0 then
-			table.insert(freeBuilders, consID)
+			tinsert(freeBuilders, consID)
 		end
 	end
 
@@ -495,15 +513,17 @@ local function buildMexes()
 	local builderMexes = lopatin(buildingCosts)
 	--print_map(builderMexes, "builder mexes")
 
-	for j, consID in ipairs(freeBuilders) do
+	for j=1, #freeBuilders do
+		local consID = freeBuilders[j]
 
 		if (builderMexes[j+1]-1 <= #free_mexes) then
 			local mexpos = free_mexes[builderMexes[j+1]-1]
-
 			local consDefID = spGetUnitDefID(consID)
 			local consDef = UnitDefs[consDefID]
+			local buildOptions = consDef.buildOptions
 
-			for i, option in ipairs(consDef.buildOptions) do
+			for i=1, #buildOptions do
+				local option = buildOptions[i]
 
 				if mexDefIDs[option] then
 					local buildable = spTestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
@@ -573,17 +593,6 @@ local function dispatchUnit(unitID)
 	units[unitID] = true
 end
 
-local function isAllyTeam(teamID)
-	local teamIDs = spGetAllyTeamList()
-	for _, allyTeamID in ipairs(teamIDs) do
-		if allyTeamID == teamID then
-			return true
-		end
-	end
-	return false
-end
-
-
 function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
 	local unitTeamID = spGetUnitTeam(unitID)
 	_,_,_,_,_,unitAllyTeam = spGetTeamInfo(unitTeamID)
@@ -640,8 +649,9 @@ function notifyCommand(cmdID, cmdParams, cmdOptions)
 end
 
 function unitHasMexOrder(unitID)
-	local queue = spGetCommandQueue(unitID,20)
-	for i, cmd in ipairs(queue) do
+	local queue = spGetCommandQueue(unitID, 20)
+	for i=1, #queue do
+		local cmd = queue[i]
 		for _, mexCmdID in pairs(mexDefIDs) do
 			if cmd.id == -mexCmdID then
 				return cmd.params
