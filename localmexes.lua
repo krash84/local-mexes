@@ -21,7 +21,7 @@ function widget:GetInfo()
 		license = "GNU GPL, v2",
 		layer = 0,
 		enabled = true, --  loaded by default?
-		version = "1.2b"
+		version = "1.2.1b"
 	}
 end
 
@@ -32,22 +32,39 @@ local glBeginEnd = gl.BeginEnd
 local glLineWidth = gl.LineWidth
 local glShape = gl.Shape
 local glDrawGroundCircle = gl.DrawGroundCircle
---local GetUnitDefID = Spring.GetUnitDefID
+local glVertex = gl.Vertex
+local glBeginEnd = gl.BeginEnd
+local glCallList = gl.CallList
+local glCreateList = gl.CreateList
+local GL_QUADS = GL.QUADS
+
 local spGetAllUnits = Spring.GetAllUnits
-local spGetUnitTeam = Spring.GetUnitTeam
-local spGetTeamInfo = Spring.GetTeamInfo
-local spGetSpectatingState = Spring.GetSpectatingState
-local spGetMyPlayerID = Spring.GetMyPlayerID
-local spGetPlayerInfo = Spring.GetPlayerInfo
-local spGetMyTeamID = Spring.GetMyTeamID
-local spGetMyAllyTeamID = Spring.GetMyAllyTeamID
-local spGetTeamUnits = Spring.GetTeamUnits
-local spGetUnitDefID = Spring.GetUnitDefID
-local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
+local spGetAllyTeamList = Spring.GetAllyTeamList
+local spGetCommandQueue = Spring.GetCommandQueue
+local spGetFullBuildQueue = Spring.GetFullBuildQueue
 local spGetGroundInfo = Spring.GetGroundInfo
 local spGetGroundHeight = Spring.GetGroundHeight
+local spGetMyPlayerID = Spring.GetMyPlayerID
+local spGetMyTeamID = Spring.GetMyTeamID
+local spGetMyAllyTeamID = Spring.GetMyAllyTeamID
+local spGetPlayerInfo = Spring.GetPlayerInfo
+local spGetSpectatingState = Spring.GetSpectatingState
+local spGetTeamUnits = Spring.GetTeamUnits
+local spGetTeamInfo = Spring.GetTeamInfo
+local spGetUnitTeam = Spring.GetUnitTeam
+local spGetUnitDefID = Spring.GetUnitDefID
+local spGetUnitPosition = Spring.GetUnitPosition
+local spGetUnitCommands = Spring.GetUnitCommands
+local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
+local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spMarkerAddPoint = Spring.MarkerAddPoint
+local spTestBuildOrder = Spring.TestBuildOrder
 local echo = Spring.Echo
+
+local atan = math.atan
+local pi = math.pi
+local cos = math.cos
+local sin = math.sin
 
 local local_mexes = {} -- array of local mexes
 local free_mexes = {} -- {{x1,z1}, {x2,z2} ... {xn,zn}}
@@ -67,6 +84,7 @@ local armComUDId = UnitDefNames["armcom"].id
 local coreComUDId = UnitDefNames["corcom"].id
 local playerAllyTeam = 0
 
+--[[
 local function print_array(A, title)
 	local s = "";
 	if title ~= nil then
@@ -82,7 +100,7 @@ local function print_array(A, title)
 	end;
 	s = s .. "]";
 	print(s);
-	Spring.Echo(s)
+	echo(s)
 end
 local function print_matrix(m, title)
 	if title ~= nil then echo(title) end
@@ -103,6 +121,7 @@ local function print_map(m, title)
 		echo (title.."["..k.."]".." = "..v)
 	end
 end
+--]]
 
 -- return the convex hull for the set of points
 -- @param A Array of
@@ -208,7 +227,7 @@ local function getExtractors()
 	for uid, v in pairs(buildings) do
 		local udid = spGetUnitDefID(uid)
 		local ud = UnitDefs[udid]
-		local x, y, z = Spring.GetUnitPosition(uid)
+		local x, y, z = spGetUnitPosition(uid)
 		if ud.isExtractor then
 			table.insert(extractors, { x, z })
 		end
@@ -256,7 +275,7 @@ local function calcPerimeter()
 	for uid, v in pairs(buildings) do
 		local udid = spGetUnitDefID(uid)
 		-- local ud = UnitDefs[udid]
-		local x, y, z = Spring.GetUnitPosition(uid)
+		local x, y, z = spGetUnitPosition(uid)
 
 		table.insert(buildingsCoords, { x, z, y })
 	end
@@ -271,15 +290,15 @@ local function calcPerimeter()
 end
 
 local function drawLine(x1,y1,z1, x2,y2,z2, width) -- long thin rectangle
-    local theta	= (x1~=x2) and math.atan((z2-z1)/(x2-x1)) or math.pi/2
-    local zOffset = math.cos(math.pi-theta) * width / 2
-    local xOffset = math.sin(math.pi-theta) * width / 2
+    local theta	= (x1~=x2) and atan((z2-z1)/(x2-x1)) or pi/2
+    local zOffset = cos(pi-theta) * width / 2
+    local xOffset = sin(pi-theta) * width / 2
     
-    gl.Vertex(x1+xOffset, y1, z1+zOffset)
-    gl.Vertex(x1-xOffset, y1, z1-zOffset)
+    glVertex(x1+xOffset, y1, z1+zOffset)
+    glVertex(x1-xOffset, y1, z1-zOffset)
     
-    gl.Vertex(x2-xOffset, y2, z2-zOffset)
-    gl.Vertex(x2+xOffset, y2, z2+zOffset)	
+    glVertex(x2-xOffset, y2, z2-zOffset)
+    glVertex(x2+xOffset, y2, z2+zOffset)	
 end
 
 local function drawPerimeter()
@@ -291,17 +310,21 @@ local function drawPerimeter()
 	local p2 = {}
 	for i = 2, #perimeter do
 		p2 = perimeter[i]
-		gl.BeginEnd(GL.QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
+		glBeginEnd(GL_QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
 		p1 = p2
 	end
 	p1 = perimeter[1]
-	gl.BeginEnd(GL.QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
+	glBeginEnd(GL_QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
 end
 
 --
 function widget:DrawWorldPreUnit()
 	
-	gl.Color(1, 1, 0.7, 0.3)
+	glColor(1, 1, 0.7, 0.3)
+
+	glDepthTest(false)	
+	glCallList(perimeterDisplayList)
+	glDepthTest(true)
 	--[[
 	glLineWidth(3.0)
 	glDepthTest(true)
@@ -325,9 +348,6 @@ function widget:DrawWorldPreUnit()
 		glDrawGroundCircle(orderedMexPos[1], orderedMexPos[2], orderedMexPos[3], 50, 16)
 	end
 	--]]
-	glDepthTest(false)
-
-	gl.CallList(perimeterDisplayList)
 end
 --]]
 
@@ -424,7 +444,7 @@ local function getBuildingCosts(builderIds, mexPositions)
 
 	for j, consId in ipairs(builderIds) do
 		for i, mexPos in ipairs(mexPositions) do
-			local x, y, z = Spring.GetUnitPosition(consId)
+			local x, y, z = spGetUnitPosition(consId)
 			local dx = mexPos[1] - x
 			local dz = mexPos[2] - z
 			local dist = math.sqrt(dx*dx + dz*dz)
@@ -455,7 +475,7 @@ end
 local function buildMexes()
 	local freeBuilders = {}
 	for consID, v in pairs(constructors) do
-		local ordersQueue = Spring.GetUnitCommands(consID, 1)
+		local ordersQueue = spGetUnitCommands(consID, 1)
 		if #ordersQueue == 0 then
 			table.insert(freeBuilders, consID)
 		end
@@ -486,11 +506,11 @@ local function buildMexes()
 			for i, option in ipairs(consDef.buildOptions) do
 
 				if mexDefIDs[option] then
-					local buildable = Spring.TestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
+					local buildable = spTestBuildOrder(option, mexpos[1], 0, mexpos[2], 1)
 
 					if buildable ~= 0 then
 						--echo("------    giving order to unit " .. consID .. "[" .. consDef.name .. "] to build "..UnitDefs[option].name .. " at " .. mexpos[1]..", "..mexpos[2])
-						Spring.GiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
+						spGiveOrderToUnit(consID, -option, { mexpos[1], 0, mexpos[2] }, { "shift" })
 						break;
 					end
 				end
@@ -519,11 +539,11 @@ end
 
 --[[local function notifyNotAlly(unitID)
 	echo ("uid: "..unitID)
-	local ud = UnitDefs[Spring.GetUnitDefID(unitID)]
+	local ud = UnitDefs[spGetUnitDefID(unitID)]
 	if not ud.isBuilding then
 		return
 	end
-	local x, y, z = Spring.GetUnitPosition(unitID)
+	local x, y, z = spGetUnitPosition(unitID)
 	spMarkerAddPoint(x, y, z, "not ally", true)
 end--]]
 
@@ -554,7 +574,7 @@ local function dispatchUnit(unitID)
 end
 
 local function isAllyTeam(teamID)
-	local teamIDs = Spring.GetAllyTeamList()
+	local teamIDs = spGetAllyTeamList()
 	for _, allyTeamID in ipairs(teamIDs) do
 		if allyTeamID == teamID then
 			return true
@@ -573,7 +593,7 @@ function widget:UnitCreated(unitID, unitDefID, unitTeam, builderID)
 
 	-- if we are building the mex
 	if mexDefIDs[unitDefID] then
-		local x, y, z = Spring.GetUnitPosition(unitID)
+		local x, y, z = spGetUnitPosition(unitID)
 		processing_mexes[unitID] = { x, z }
 		ordered_mexes[builderID] = nil
 	end
@@ -590,7 +610,7 @@ function updateFreeMexes()
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
 	
-	perimeterDisplayList = gl.CreateList(drawPerimeter);
+	perimeterDisplayList = glCreateList(drawPerimeter);
 end
 
 function widget:UnitFinished(unitID, unitDefID, unitTeam)
@@ -620,7 +640,7 @@ function notifyCommand(cmdID, cmdParams, cmdOptions)
 end
 
 function unitHasMexOrder(unitID)
-	local queue = Spring.GetCommandQueue(unitID,20)
+	local queue = spGetCommandQueue(unitID,20)
 	for i, cmd in ipairs(queue) do
 		for _, mexCmdID in pairs(mexDefIDs) do
 			if cmd.id == -mexCmdID then
@@ -633,7 +653,7 @@ end
 
 --[[
 function unitBuildsMex(unitID)
-	local queue = Spring.GetFullBuildQueue (unitID)
+	local queue = spGetFullBuildQueue (unitID)
 	for _, udefCounts in pairs(queue) do
 		for __, mexUdid in pairs(mexDefIDs) do
 			--echo ("mexUdid: "..mexUdid);
