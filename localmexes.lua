@@ -59,7 +59,7 @@ local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
 local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spMarkerAddPoint = Spring.MarkerAddPoint
 local spTestBuildOrder = Spring.TestBuildOrder
-local echo = Spring.Echo
+--local echo = Spring.Echo
 
 local atan = math.atan
 local pi = math.pi
@@ -88,6 +88,14 @@ local mexDefIDs = {} -- {ud => ud}
 local armComUDId = UnitDefNames["armcom"].id
 local coreComUDId = UnitDefNames["corcom"].id
 local playerAllyTeam = 0
+
+local logfile = nil
+
+local function echo(s) 
+	Spring.Echo(s)
+	logfile:write(s)
+	logfile:flush()
+end
 
 --[[
 local function print_array(A, title)
@@ -128,13 +136,20 @@ local function print_map(m, title)
 end
 --]]
 
+
+local function rotate(A, B, C)
+	return (B[1] - A[1]) * (C[2] - B[2]) - (B[2] - A[2]) * (C[1] - B[1])
+end
+
+
+local function intersect(A, B, C, D)
+  return rotate(A, B, C)*rotate(A, B, D) <= 0 and rotate(C, D, A)*rotate(C, D, B)<0
+end
+
+
 -- return the convex hull for the set of points
 -- @param A Array of
 local function grahamscan(A)
-
-	function rotate(A, B, C)
-		return (B[1] - A[1]) * (C[2] - B[2]) - (B[2] - A[2]) * (C[1] - B[1])
-	end
 
 	local n = #A;
 	if (n < 3) then
@@ -213,6 +228,8 @@ local function pointInConvexhull(A, CH)
 
 	return (icount % 2 ~= 0);
 end
+
+
 
 local function getLocalMexes(mexes, perimeter)
 	local_mexes = {}
@@ -322,6 +339,7 @@ local function drawPerimeter()
 	local p2 = {}
 	for i = 2, #perimeter do
 		p2 = perimeter[i]
+		echo(p1[1]..','..p1[2]..'\n')
 		glBeginEnd(GL_QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
 		p1 = p2
 	end
@@ -722,6 +740,13 @@ end
 
 
 function widget:Initialize()
+	logfile, err = io.open("localmexes.log", "w")
+	if logfile == nil then
+		Spring.Echo('<Local Mexes> '..err)
+		widgetHandler:RemoveWidget(self)
+		return
+	end
+
 	if not WG.metalSpots then
 		echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
 		widgetHandler:RemoveWidget(self)
@@ -755,3 +780,8 @@ function widget:Initialize()
 	updateFreeMexes()
 end
 
+function widget:Shutdown()
+	if logfile ~= nil then
+		logfile:close()
+	end
+end
