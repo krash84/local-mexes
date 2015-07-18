@@ -178,11 +178,18 @@ local function range(n)
 end
 
 -- return convex hull using jarvis alg
-local function jarvismarch(A)
+local function jarvismatch(A)
 	local n = #A
 	local P = range(n)
 	-- start point
+	
 	for i = 2,n do
+		
+		if A[P[i]][1] == nil or A[P[1]][1] == nil then 
+			echo ("Something went wrong :(")
+			return nil
+		end
+		
 		if A[P[i]][1]<A[P[1]][1] then 
 			P[i], P[1] = P[1], P[i]  
 		else 
@@ -422,11 +429,15 @@ local function calcPerimeter()
 		-- local ud = UnitDefs[udid]
 		local x, y, z = spGetUnitPosition(uid)
 
-		tinsert(buildingsCoords, { x, z, y })
+		buildingsCoords[#buildingsCoords+1] = { x, z, y }
 	end
 
 	--
-	local perimeterVertices = jarvismarch(buildingsCoords)
+	local perimeterVertices = jarvismatch(buildingsCoords)
+	if perimeterVertices == nil then 
+		return nil 
+	end
+	
 	--print_array(perimeterVertices)
 	local coords = {}
 	for j=1, #perimeterVertices do
@@ -774,7 +785,11 @@ function widget:GameFrame(frameNum)
 end
 
 function updateFreeMexes()
-	perimeter = calcPerimeter()
+	local newPerimeter = calcPerimeter()
+	if newPerimeter ~= nil then 
+		perimeter = newPerimeter
+	end
+	
 	local_mexes = getLocalMexes(metalSpots, perimeter)
 	free_mexes = getFreeMexes(local_mexes)
 	
@@ -903,7 +918,7 @@ function widget:Initialize()
 	playerAllyTeam = allyTeam
 	
 	if spec == true then
-		--
+		--[[
 		echo("<Local Mexes> Spectator mode. Widget removed")
 		widgetHandler:RemoveWidget(self)
 		return
