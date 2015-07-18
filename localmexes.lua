@@ -21,7 +21,7 @@ function widget:GetInfo()
 		license = "GNU GPL, v2",
 		layer = 0,
 		enabled = true, --  loaded by default?
-		version = "1.2.1b"
+		version = "1.2.2"
 	}
 end
 
@@ -59,7 +59,7 @@ local spGiveOrderToUnitMap = Spring.GiveOrderToUnitMap
 local spGiveOrderToUnit = Spring.GiveOrderToUnit
 local spMarkerAddPoint = Spring.MarkerAddPoint
 local spTestBuildOrder = Spring.TestBuildOrder
---local echo = Spring.Echo
+local echo = Spring.Echo
 
 local atan = math.atan
 local pi = math.pi
@@ -89,18 +89,21 @@ local armComUDId = UnitDefNames["armcom"].id
 local coreComUDId = UnitDefNames["corcom"].id
 local playerAllyTeam = 0
 
+--[[
 local logfile = nil
 local debug_points = nil
 local debug_numbers = nil
+--]]
 
-
+--[[
 local function echo(s) 
 	Spring.Echo(s)
 --	logfile:write(s)
 --	logfile:flush()
 end
+--]]
 
---
+--[[
 local function print_array(A, title)
 	local s = "";
 	if title ~= nil then
@@ -168,41 +171,13 @@ local function cw(a, b, c)
     return (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]) < 0;
 end
 
---[[
-local function convexHull(p) {
-
-	local function compare(a, b)
-		return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2]));
-	end
-
-	local n = #p;
-    if (n <= 1) then
-        return p;
-    int k = 0;
-	table.sort(p, compare)
-	local q = {}
-    --vector<point> q(n * 2);
-	
-	local i = 1
-	
-	
-    for (int i = 0; i < n; q[k++] = p[i++])
-        for (; k >= 2 && !cw(q[k - 2], q[k - 1], p[i]); --k)
-            ;
-    for (int i = n - 2, t = k; i >= 0; q[k++] = p[i--])
-        for (; k > t && !cw(q[k - 2], q[k - 1], p[i]); --k)
-            ;
-    q.resize(k - 1 - (q[0] == q[1]));
-    return q;
-}
---]]
-
 local function range(n)
 	local p = {}
 	for i = 1, n do p[#p+1]=i end
 	return p
 end
-		
+
+-- return convex hull using jarvis alg
 local function jarvismarch(A)
 	local n = #A
 	local P = range(n)
@@ -240,7 +215,7 @@ local function jarvismarch(A)
 	return H      
 end
 
-
+--[[
 -- return the convex hull for the set of points
 -- @param A Array of
 local function grahamscan(A)
@@ -277,32 +252,31 @@ local function grahamscan(A)
 	--debugPoints(A, P)
 
 	for i = 1, n do
-		if A[P[i]][1] < A[P[1]][1] then
+		if A[P[i] ][1] < A[P[1] ][1] then
 			P[i], P[1] = P[1], P[i];
 		end
 	end
 	-- check:
 	for i = 2, n do
-		--echo (pstr(A[P[1]]) .. " левее ".. pstr(A[P[i]]))
-		if A[P[i]][1] < A[P[1]][1] then
-			echo ("X left fail: "..pstr(A[P[i]]).." < "..pstr(A[P[i-1]]))
+		if A[P[i] ][1] < A[P[1] ][1] then
+			echo ("X left fail: "..pstr(A[P[i] ]).." < "..pstr(A[P[i-1] ]))
 		end
 	end
 	
 	debugPoints(A, P)
-	print_array(P, "First order sort");
+	--print_array(P, "First order sort");
 	
 
 	local j
 	for i = 3, n do
 		j = i
 
-			local p1 = A[P[1]]
-			local p2 = A[P[j-1]]
-			local p3 = A[P[j]]
+			local p1 = A[P[1] ]
+			local p2 = A[P[j-1] ]
+			local p3 = A[P[j] ]
 
 		while j > 2 do
-			local res = rotate(A[P[1]], A[P[j-1]], A[P[j]])
+			local res = rotate(A[P[1] ], A[P[j-1] ], A[P[j] ])
 			--echo ("res "..res)
 			local sign = "<"
 			if res > 0 then sign = ">" end
@@ -316,28 +290,28 @@ local function grahamscan(A)
 		end
 	end
 	debugPoints(A, P)
-	print_array(P, "По левизне");
+	--print_array(P, "Left");
 	-- check:
 	for i = 3, n do
-		if rotate(A[P[1]], A[P[i-1]], A[P[i]]) < 0 then
+		if rotate(A[P[1] ], A[P[i-1] ], A[P[i] ]) < 0 then
 			echo("Rotate left failed")
 		end
 	end
 
 	local S = { P[1], P[2] };
-	local pts = {A[P[1]], A[P[2]]}
+	local pts = {A[P[1] ], A[P[2] ]}
 	--print_array(S, "Stack");
 	for i = 3, n do
-		while rotate(A[S[#S - 1]], A[S[#S]], A[P[i]]) < 0 do
+		while rotate(A[S[#S - 1] ], A[S[#S] ], A[P[i] ]) < 0 do
 			tremove(S)
 			tremove(pts)
 		end;
 		tinsert(S, P[i]);
-		tinsert(pts, A[P[i]])
+		tinsert(pts, A[P[i] ])
 	end;
 	-- check:
 	for i = 3, #S do
-		if rotate(A[S[i-2]], A[S[i-1]], A[S[i]]) < 0 then
+		if rotate(A[S[i-2] ], A[S[i-1] ], A[S[i] ]) < 0 then
 			echo ("Sort failed")
 		end
 	end
@@ -347,22 +321,10 @@ local function grahamscan(A)
 	--print_array(S)
 	return S;
 end
+--]]
 
 -- check if the given point {x,z} is located inside the convex hull ({x1,z1}, {x2,z2}, ..., {xn,zn}}
 local function pointInConvexhull(A, CH)
-
-	--   http://dic.academic.ru/dic.nsf/ruwiki/209337#sel=27:1,29:14
-	--   http://acmp.ru/article.asp?id_text=170
-	local function testSegmentIntersection(A, B, C, D)
-		local v1, v2, v3, v4
-
-		v1 = (D[1] - C[1]) * (A[2] - C[2]) - (D[2] - C[2]) * (A[1] - C[1])
-		v2 = (D[1] - C[1]) * (B[2] - C[2]) - (D[2] - C[2]) * (B[1] - C[1])
-		v3 = (B[1] - A[1]) * (C[2] - A[2]) - (B[2] - A[2]) * (C[1] - A[1])
-		v4 = (B[1] - A[1]) * (D[2] - A[2]) - (B[2] - A[2]) * (D[1] - A[1])
-
-		return (v1 * v2 < 0) and (v3 * v4 < 0)
-	end
 
 	local icount = 0
 	local B = { CH[1][1], CH[1][2] };
@@ -371,12 +333,12 @@ local function pointInConvexhull(A, CH)
 	--print_a(A)
 	--print_a(B)
 
-	if (testSegmentIntersection(A, B, CH[tgetn(CH)], CH[1])) then
+	if (intersect(A, B, CH[tgetn(CH)], CH[1])) then
 		icount = icount + 1
 	end
 
 	for i = 2, tgetn(CH) do
-		if (testSegmentIntersection(A, B, CH[i - 1], CH[i])) then
+		if (intersect(A, B, CH[i - 1], CH[i])) then
 			icount = icount + 1
 		end
 	end
@@ -504,18 +466,8 @@ local function drawPerimeter()
 	glBeginEnd(GL_QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
 end
 
-
-
---[[function widget:DrawScreenEffects()
-	for _,id in ipairs(Spring.GetAllUnits()) do
-		local pos1, pos3, pos2 = Spring.GetUnitPosition(id);
-		local x,y=Spring.WorldToScreenCoords(pos1, pos3, pos2)
-		gl.Text(pos1..', '..pos2, x,y,16)
-	end
-end--]]
-
---
-function widget:DrawScreenEffects()
+--[[
+--function widget:DrawScreenEffects()
 	
 	if debug_points == nil then
 		return
@@ -533,7 +485,8 @@ function widget:DrawScreenEffects()
 		draw(num, pos)
 	end
 	
-end--]]
+end
+--]]
 
 --
 function widget:DrawWorldPreUnit()
@@ -928,12 +881,14 @@ end
 
 
 function widget:Initialize()
+	--[[
 	logfile, err = io.open("localmexes.log", "w")
 	if logfile == nil then
 		Spring.Echo('<Local Mexes> '..err)
 		widgetHandler:RemoveWidget(self)
 		return
 	end
+	--]]
 
 	if not WG.metalSpots then
 		echo("<Local Mexes> This widget requires the 'Metalspot Finder' widget to run.")
@@ -948,7 +903,7 @@ function widget:Initialize()
 	playerAllyTeam = allyTeam
 	
 	if spec == true then
-		--[[
+		--
 		echo("<Local Mexes> Spectator mode. Widget removed")
 		widgetHandler:RemoveWidget(self)
 		return
@@ -969,7 +924,9 @@ function widget:Initialize()
 end
 
 function widget:Shutdown()
+	--[[
 	if logfile ~= nil then
 		logfile:close()
 	end
+	--]]
 end
