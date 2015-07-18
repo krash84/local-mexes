@@ -90,14 +90,17 @@ local coreComUDId = UnitDefNames["corcom"].id
 local playerAllyTeam = 0
 
 local logfile = nil
+local debug_points = nil
+local debug_numbers = nil
+
 
 local function echo(s) 
 	Spring.Echo(s)
-	logfile:write(s)
-	logfile:flush()
+--	logfile:write(s)
+--	logfile:flush()
 end
 
---[[
+--
 local function print_array(A, title)
 	local s = "";
 	if title ~= nil then
@@ -106,7 +109,7 @@ local function print_array(A, title)
 	s = s .. "[";
 
 	for k, v in pairs(A) do
-		s = s .. tonumber(v - 1)
+		s = s .. tonumber(v)
 		if (k ~= #A) then
 			s = s .. ", ";
 		end;
@@ -134,11 +137,17 @@ local function print_map(m, title)
 		echo (title.."["..k.."]".." = "..v)
 	end
 end
+local function debugPoints(points, numbers)
+	debug_points = points
+	debug_numbers = numbers
+end
 --]]
 
 
 local function rotate(A, B, C)
-	return (B[1] - A[1]) * (C[2] - B[2]) - (B[2] - A[2]) * (C[1] - B[1])
+	local res = (B[1]-A[1])*(C[2]-B[2]) - (B[2]-A[2])*(C[1]-B[1])
+	--echo ("res = "..res)
+	return res
 end
 
 
@@ -147,49 +156,195 @@ local function intersect(A, B, C, D)
 end
 
 
+local function printP(p)
+	echo(p[1]..", "..p[2])
+end
+
+local function pstr(p)
+	return p[1]..","..p[2]
+end
+
+local function cw(a, b, c) 
+    return (b[1] - a[1]) * (c[2] - a[2]) - (b[2] - a[2]) * (c[1] - a[1]) < 0;
+end
+
+--[[
+local function convexHull(p) {
+
+	local function compare(a, b)
+		return a[1] < b[1] or (a[1] == b[1] and a[2] < b[2]));
+	end
+
+	local n = #p;
+    if (n <= 1) then
+        return p;
+    int k = 0;
+	table.sort(p, compare)
+	local q = {}
+    --vector<point> q(n * 2);
+	
+	local i = 1
+	
+	
+    for (int i = 0; i < n; q[k++] = p[i++])
+        for (; k >= 2 && !cw(q[k - 2], q[k - 1], p[i]); --k)
+            ;
+    for (int i = n - 2, t = k; i >= 0; q[k++] = p[i--])
+        for (; k > t && !cw(q[k - 2], q[k - 1], p[i]); --k)
+            ;
+    q.resize(k - 1 - (q[0] == q[1]));
+    return q;
+}
+--]]
+
+local function range(n)
+	local p = {}
+	for i = 1, n do p[#p+1]=i end
+	return p
+end
+		
+local function jarvismarch(A)
+	local n = #A
+	local P = range(n)
+	-- start point
+	for i = 2,n do
+		if A[P[i]][1]<A[P[1]][1] then 
+			P[i], P[1] = P[1], P[i]  
+		else 
+			if A[P[i]][1] == A[P[1]][1] and A[P[i]][2] < A[P[1]][2] then
+				P[i], P[1] = P[1], P[i]  
+			end
+		end
+	end
+
+	local H = {P[1]}
+	tremove(P, 1)
+	tinsert(P, H[1])
+	while true do
+		local right = 1
+		for i=2,#P do
+			--if rotate(A[H[#H]],A[P[right]],A[P[i]])<0 then
+			if cw(A[H[#H]],A[P[right]],A[P[i]]) then
+				right = i
+			end
+		end
+		if P[right]==H[1] then
+			--debugPoints(A, {H[1]})
+			break
+		else
+			tinsert(H, P[right])
+			tremove(P, right)
+		end
+	end
+	
+	return H      
+end
+
+
 -- return the convex hull for the set of points
 -- @param A Array of
 local function grahamscan(A)
 
 	local n = #A;
+	echo ("Graham N "..n)
 	if (n < 3) then
 		return {}
 	end
+	
+	local astr = ''
+	for i=1,n do
+		for j=1,3 do
+			astr = astr..pstr(A[i])
+		end
+		astr = astr..'\n'
+	end
+	--echo(astr)
 
 	--print(n)
-	local P = {};
+	local P = {}
 
-	--print_array("grahamscan A", A);
+	--print_array(A, "grahamscan A");
+	for i = 1, n do 
+		local p = A[i]
+		--printP(p)
+	end
 
-	for i = 1, n do P[i] = i end;
-	--print_array(P, "P");
+	for i = 1, n do 
+		--P[i] = i 
+		tinsert(P, i)
+	end;
+	print_array(P, "P");
+	--debugPoints(A, P)
 
 	for i = 1, n do
 		if A[P[i]][1] < A[P[1]][1] then
 			P[i], P[1] = P[1], P[i];
-		end;
+		end
 	end
-	-- print_array(P, "First order sort");
+	-- check:
+	for i = 2, n do
+		--echo (pstr(A[P[1]]) .. " левее ".. pstr(A[P[i]]))
+		if A[P[i]][1] < A[P[1]][1] then
+			echo ("X left fail: "..pstr(A[P[i]]).." < "..pstr(A[P[i-1]]))
+		end
+	end
+	
+	debugPoints(A, P)
+	print_array(P, "First order sort");
+	
 
-	local j = 0;
+	local j
 	for i = 3, n do
-		j = i - 1;
-		while j >= 0 and (rotate(A[P[1]], A[P[j]], A[P[j + 1]]) < 0) do
-			P[j], P[j + 1] = P[j + 1], P[j];
-			j = j - 1;
-		end;
-	end;
-	-- print_array(P, "iSorted P");
+		j = i
+
+			local p1 = A[P[1]]
+			local p2 = A[P[j-1]]
+			local p3 = A[P[j]]
+
+		while j > 2 do
+			local res = rotate(A[P[1]], A[P[j-1]], A[P[j]])
+			--echo ("res "..res)
+			local sign = "<"
+			if res > 0 then sign = ">" end
+			if res == 0 then sign = "==" end
+			--echo ("i = "..i..", j = "..(j).." and rotate("..(p1[1]..','..p1[2])..", "..(p2[1]..','..p2[2])..", "..(p3[1]..','..p3[2])..") "..sign.." 0"..', res = '..res)
+			if (res < 0 or res == 0) then
+				P[j], P[j-1] = P[j-1], P[j]
+				j = j - 1
+			else break
+			end
+		end
+	end
+	debugPoints(A, P)
+	print_array(P, "По левизне");
+	-- check:
+	for i = 3, n do
+		if rotate(A[P[1]], A[P[i-1]], A[P[i]]) < 0 then
+			echo("Rotate left failed")
+		end
+	end
 
 	local S = { P[1], P[2] };
+	local pts = {A[P[1]], A[P[2]]}
 	--print_array(S, "Stack");
 	for i = 3, n do
 		while rotate(A[S[#S - 1]], A[S[#S]], A[P[i]]) < 0 do
-			tremove(S, #S);
+			tremove(S)
+			tremove(pts)
 		end;
 		tinsert(S, P[i]);
+		tinsert(pts, A[P[i]])
 	end;
+	-- check:
+	for i = 3, #S do
+		if rotate(A[S[i-2]], A[S[i-1]], A[S[i]]) < 0 then
+			echo ("Sort failed")
+		end
+	end
+	
+	--debugPoints(pts, S)
 
+	--print_array(S)
 	return S;
 end
 
@@ -301,19 +456,22 @@ end
 local function calcPerimeter()
 	local buildingsCoords = {}
 	for uid, v in pairs(buildings) do
-		local udid = spGetUnitDefID(uid)
+		--local udid = spGetUnitDefID(uid)
 		-- local ud = UnitDefs[udid]
 		local x, y, z = spGetUnitPosition(uid)
 
 		tinsert(buildingsCoords, { x, z, y })
 	end
 
-	local perimeterVertices = grahamscan(buildingsCoords)
+	--
+	local perimeterVertices = jarvismarch(buildingsCoords)
+	--print_array(perimeterVertices)
 	local coords = {}
 	for j=1, #perimeterVertices do
 		local pv = perimeterVertices[j]
 		tinsert(coords, buildingsCoords[pv])
 	end
+	--]]
 
 	return coords
 end
@@ -339,13 +497,43 @@ local function drawPerimeter()
 	local p2 = {}
 	for i = 2, #perimeter do
 		p2 = perimeter[i]
-		echo(p1[1]..','..p1[2]..'\n')
 		glBeginEnd(GL_QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
 		p1 = p2
 	end
 	p1 = perimeter[1]
 	glBeginEnd(GL_QUADS, drawLine, p1[1], p1[3], p1[2], p2[1], p2[3], p2[2], lineWidth) 
 end
+
+
+
+--[[function widget:DrawScreenEffects()
+	for _,id in ipairs(Spring.GetAllUnits()) do
+		local pos1, pos3, pos2 = Spring.GetUnitPosition(id);
+		local x,y=Spring.WorldToScreenCoords(pos1, pos3, pos2)
+		gl.Text(pos1..', '..pos2, x,y,16)
+	end
+end--]]
+
+--
+function widget:DrawScreenEffects()
+	
+	if debug_points == nil then
+		return
+	end
+	
+	local function draw(s, pos)
+		local x,y=Spring.WorldToScreenCoords(pos[1], pos[3], pos[2])
+		gl.Text(s,x,y,16)
+	end
+	
+	for i=1, #debug_numbers do
+		local num = debug_numbers[i]
+		local pos = debug_points[num]
+		--echo ("ppos: "..pos[1]..' '..pos[2]..' '..pos[3])		
+		draw(num, pos)
+	end
+	
+end--]]
 
 --
 function widget:DrawWorldPreUnit()
@@ -760,7 +948,7 @@ function widget:Initialize()
 	playerAllyTeam = allyTeam
 	
 	if spec == true then
-		--
+		--[[
 		echo("<Local Mexes> Spectator mode. Widget removed")
 		widgetHandler:RemoveWidget(self)
 		return
